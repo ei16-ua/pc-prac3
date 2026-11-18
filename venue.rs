@@ -306,8 +306,11 @@ impl ConcurrentVenue {
     }
 
     /// Busca un sector por su código.
+    /// Con ≤30 sectores la búsqueda lineal es más rápida que el HashMap
+    /// por mejor localidad de caché (no hay indirección de hash ni posible miss).
+    #[inline(always)]
     pub fn sector(&self, code: &str) -> Option<&SectorConcurrente> {
-        self.index.get(code).map(|&i| &self.sectors[i])
+        self.sectors.iter().find(|s| s.code() == code)
     }
 
     /// Reconstruye un `Venue` normal con el estado actual (para `get_venue`).

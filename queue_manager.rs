@@ -85,7 +85,10 @@ impl QueueManager for ConcurrentQueueManager {
                     let mut booker = self.booker.clone();
                     scope.spawn(move || {
                         // Tickets vendidos por este hilo: Vec local, sin cerrojo.
-                        let mut mis_tickets = Vec::new();
+                        // Preasignamos capacidad proporcional para evitar reallocaciones.
+                        let mut mis_tickets = Vec::with_capacity(
+                            (booker.get_total_capacity() / n_threads(booker.get_total_capacity())).max(64)
+                        );
                         let mut tail_fails: u32 = 0;
                         while booker.remaining_seats() > 0 {
                             let tickets = simulate_booking(&mut booker);

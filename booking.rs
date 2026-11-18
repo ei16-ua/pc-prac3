@@ -1,6 +1,8 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use rand::Rng;
+
 #[path = "cas.rs"]
 mod cas;
 use crate::config;
@@ -266,6 +268,7 @@ impl ConcurrentBooker {
 
     /// Reserva `n` plazas: resta `n` al contador solo si quedan suficientes.
     /// `fetch_update` es el bucle leer -> calcular -> CAS -> reintentar.
+    #[inline(always)]
     fn select_general(sector: &SectorGeneral, n: usize) -> Result<(), String> {
         sector
             .available
@@ -284,6 +287,7 @@ impl ConcurrentBooker {
     }
 
     /// Venta definitiva: los IDs salen de un contador, así que son únicos.
+    #[inline(always)]
     fn book_general(&self, sector: &SectorGeneral, n: usize) -> Vec<String> {
         let primero = sector.next_ticket.0.fetch_add(n, Ordering::AcqRel);
         // Usa directamente los IDs precreados del Venue original (cero format!)
@@ -354,13 +358,23 @@ impl Booker for ConcurrentBooker {
             // Para sectores numerados solo necesitamos MAX_TICKETS*4 candidatos:
             // simulate_booking llama a choose_multiple(n_tickets) sobre este Vec,
             // así que con 24 candidatos hay suficiente variedad sin clonar hasta 300 strings.
+            // Empezamos por un índice aleatorio para repartir la contención CAS
+            // entre hilos: sin esto todos compiten por los mismos asientos bajos.
             // Usamos Relaxed porque es una lectura de observación; el CAS posterior
             // garantiza la atomicidad real de la reserva.
             Some(SectorConcurrente::Numerado(s)) => {
                 let limit = (config::MAX_TICKETS * 4).min(s.capacity);
+                let start = if s.capacity > 1 {
+                    rand::rng().random_range(0..s.capacity)
+                } else {
+                    0
+                };
                 s.seats
                     .iter()
                     .zip(&s.ids)
+                    .cycle()
+                    .skip(start)
+                    .take(s.capacity)
                     .filter(|(estado, _)| estado.load(Ordering::Relaxed) == LIBRE)
                     .map(|(_, id)| id.clone())
                     .take(limit)

@@ -8,6 +8,7 @@ use crate::venue::SectorNumerado;
 /// El rollback usa CAS (no store) para no sobreescribir un cambio
 /// que otro hilo haya hecho entre medias.
 #[allow(dead_code)]
+#[inline(always)]
 pub(crate) fn cambiar_todas(
     sector: &SectorNumerado,
     idxs: &[usize],
